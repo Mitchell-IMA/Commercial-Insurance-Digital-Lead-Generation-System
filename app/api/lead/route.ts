@@ -1,3 +1,51 @@
-import {NextResponse} from 'next/server';import {z} from 'zod';
-const schema=z.object({name:z.string().min(2).max(100),email:z.string().email(),title:z.string().max(100).optional(),company:z.string().min(2).max(150),phone:z.string().max(30).optional(),industry:z.string(),renewalMonth:z.string().optional(),results:z.record(z.any())});
-export async function POST(req:Request){try{const body=schema.parse(await req.json());const hook=process.env.LEAD_WEBHOOK_URL;if(hook){const r=await fetch(hook,{method:'POST',headers:{'content-type':'application/json','x-marketready-source':'website'},body:JSON.stringify({...body,receivedAt:new Date().toISOString()})});if(!r.ok)throw new Error('Webhook rejected lead');return NextResponse.json({ok:true,mode:'webhook'});}console.log('MARKETREADY_PREVIEW_LEAD',JSON.stringify(body));return NextResponse.json({ok:true,mode:'preview'});}catch(e){return NextResponse.json({ok:false,error:'Please review the submitted information.'},{status:400})}}
+const { data: org } = await supabase
+  .from("organizations")
+  .insert({
+    company_name: body.company,
+    industry: body.industry,
+    revenue_band: body.revenueBand,
+    employee_band: body.employeeBand
+  })
+  .select()
+  .single();
+const { data: contact } = await supabase
+  .from("contacts")
+  .insert({
+    organization_id: org.id,
+    first_name: body.name,
+    title: body.title,
+    email: body.email,
+    phone: body.phone,
+    renewal_month: body.renewalMonth
+  })
+  .select()
+  .single();
+const { data: assessment } = await supabase
+  .from("assessments")
+  .insert({
+    organization_id: org.id,
+    contact_id: contact.id,
+
+    overall_score: body.results.overall,
+    confidence_score: body.results.confidence,
+
+    insurance_governance:
+      body.results.scores["Insurance Governance"],
+
+    renewal_readiness:
+      body.results.scores["Renewal Readiness"],
+
+    claims_governance:
+      body.results.scores["Claims Governance"],
+
+    risk_control:
+      body.results.scores["Risk Control & Operations"],
+
+    contractual_risk_transfer:
+      body.results.scores["Contractual Risk Transfer"],
+
+    emerging_risk:
+      body.results.scores["Emerging Risk"]
+  })
+  .select()
+  .single();
